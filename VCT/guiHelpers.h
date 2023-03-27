@@ -1,16 +1,16 @@
 #include "definitions.h"
-#include "framework.h"
+#include <dxgi.h>
+#include <d3d11.h>
+#include <commctrl.h>
 #include "include/imgui/backends/imgui_impl_dx11.h"
 #include "include/imgui/backends/imgui_impl_win32.h"
 #include "include/imgui/imgui.h"
 #define STB_IMAGE_IMPLEMENTATION
 #include "include/stb_image.h"
+#include "resource.h"
 
-const ImVec4 GreenColor(0.13f, 0.73f, 0.69f, 1.0f);
+const ImVec4 YellowColor(0.949f, 0.882f, 0.553f, 1.0f);
 const ImVec4 RedColor(0.89f, 0.41f, 0.25f, 1.0f);
-
-constexpr const char* connected_str = "Connected";
-constexpr const char* disconnected_str = "Disconnected";
 
 static ID3D11Device* g_pd3dDevice = NULL;
 static ID3D11DeviceContext* g_pd3dDeviceContext = NULL;
@@ -22,6 +22,57 @@ void CleanupDeviceD3D();
 void CreateRenderTarget();
 void CleanupRenderTarget();
 LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
+UINT const WMAPP_NOTIFYCALLBACK = WM_APP + 1;
+
+// {32c71837-51f1-4262-b95d-65a831463f1a}
+static const GUID myGUID = { 0x32c71837, 0x51f1, 0x4262, { 0xb9, 0x5d, 0x65, 0xa8, 0x31, 0x46, 0x3f, 0x1a } };
+
+bool ShowTrayIcon(HWND hwnd)
+{
+    NOTIFYICONDATA nid = { sizeof(nid) };
+    nid.hWnd = hwnd;
+    nid.uFlags = NIF_ICON | NIF_TIP | NIF_MESSAGE | NIF_SHOWTIP | NIF_GUID;
+    nid.uCallbackMessage = WMAPP_NOTIFYCALLBACK;
+    nid.guidItem = myGUID;
+
+    wcscpy_s(nid.szTip, L"VCT is running");
+    nid.hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(IDI_ICON));
+
+    auto ret = Shell_NotifyIcon(NIM_ADD, &nid);
+
+    nid.uVersion = NOTIFYICON_VERSION_4;
+    return Shell_NotifyIcon(NIM_SETVERSION, &nid) && ret;
+}
+
+BOOL DeleteNotificationIcon()
+{
+    NOTIFYICONDATA nid = { sizeof(nid) };
+    nid.uFlags = NIF_GUID;
+    nid.guidItem = myGUID;
+    return Shell_NotifyIcon(NIM_DELETE, &nid);
+}
+
+void ShowTrayNotificationBalloon(HWND hwnd, const wchar_t* title, const wchar_t* message, DWORD icon)
+{
+    NOTIFYICONDATA nid = { sizeof(nid) };
+    nid.uFlags = NIF_INFO | NIF_GUID;
+    nid.guidItem = myGUID;
+    nid.dwInfoFlags = NIIF_INFO;
+
+    wcscpy_s(nid.szInfoTitle, title);
+    wcscpy_s(nid.szInfo, message);
+
+    Shell_NotifyIcon(NIM_MODIFY, &nid);
+}
+
+BOOL RestoreTooltip()
+{
+    NOTIFYICONDATA nid = { sizeof(nid) };
+    nid.uFlags = NIF_SHOWTIP | NIF_GUID;
+    nid.guidItem = myGUID;
+    return Shell_NotifyIcon(NIM_MODIFY, &nid);
+}
 
 bool CreateDeviceD3D(HWND hWnd)
 {
@@ -94,13 +145,14 @@ void CleanupRenderTarget()
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
-LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
+LRESULT WINAPI WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
-    if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam))
+    if (ImGui_ImplWin32_WndProcHandler(hwnd, msg, wParam, lParam))
         return true;
 
     switch (msg)
     {
+
     case WM_SIZE:
         if (g_pd3dDevice != NULL && wParam != SIZE_MINIMIZED)
         {
@@ -109,26 +161,57 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             CreateRenderTarget();
         }
         return 0;
+
     case WM_SYSCOMMAND:
         if ((wParam & 0xfff0) == SC_KEYMENU) // Disable ALT application menu
             return 0;
         break;
+
+    case WMAPP_NOTIFYCALLBACK:
+        switch (LOWORD(lParam))
+        {
+
+        case NIN_BALLOONTIMEOUT:
+            RestoreTooltip();
+            break;
+
+        case NIN_BALLOONUSERCLICK:
+            RestoreTooltip();
+            break;
+
+        case WM_LBUTTONUP:
+            ShowWindow(hwnd, SW_RESTORE);
+            break;
+        }
+
+        break;
+
     case WM_DESTROY:
+        DeleteNotificationIcon();
         PostQuitMessage(0);
         return 0;
+
+    default:
+        return DefWindowProc(hwnd, msg, wParam, lParam);
     }
-    return DefWindowProc(hWnd, msg, wParam, lParam);
+
+    return 0;
 }
 
 namespace ImGui
 {
-    void CustomTheme()
+    constexpr auto ColorFromBytes = [](uint8_t r, uint8_t g, uint8_t b)
+    {
+        return ImVec4((float)r / 255.0f, (float)g / 255.0f, (float)b / 255.0f, 1.0f);
+    };
+
+    static void CustomTheme()
     {
         ImVec4* colors = ImGui::GetStyle().Colors;
         colors[ImGuiCol_Text] = ImVec4(1.f, 1.f, 1.f, 1.00f);
         colors[ImGuiCol_TextDisabled] = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
-        colors[ImGuiCol_WindowBg] = ImVec4(0.13f, 0.15f, 0.2f, 1.00f);
-        colors[ImGuiCol_ChildBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+        colors[ImGuiCol_WindowBg] = ColorFromBytes(0, 0, 0);
+        colors[ImGuiCol_ChildBg] = ColorFromBytes(0, 0, 0);
         colors[ImGuiCol_PopupBg] = ImVec4(0.19f, 0.19f, 0.19f, 0.92f);
         colors[ImGuiCol_Border] = ImVec4(0.19f, 0.19f, 0.19f, 0.29f);
         colors[ImGuiCol_BorderShadow] = ImVec4(0.00f, 0.00f, 0.00f, 0.24f);
@@ -152,7 +235,7 @@ namespace ImGui
         colors[ImGuiCol_Header] = ImVec4(0.00f, 0.00f, 0.00f, 0.52f);
         colors[ImGuiCol_HeaderHovered] = ImVec4(0.00f, 0.00f, 0.00f, 0.36f);
         colors[ImGuiCol_HeaderActive] = ImVec4(0.20f, 0.22f, 0.23f, 0.33f);
-        colors[ImGuiCol_Separator] = ImVec4(0.28f, 0.28f, 0.28f, 0.29f);
+        colors[ImGuiCol_Separator] = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
         colors[ImGuiCol_SeparatorHovered] = ImVec4(0.44f, 0.44f, 0.44f, 0.29f);
         colors[ImGuiCol_SeparatorActive] = ImVec4(0.40f, 0.44f, 0.47f, 1.00f);
         colors[ImGuiCol_ResizeGrip] = ImVec4(0.28f, 0.28f, 0.28f, 0.29f);
@@ -182,7 +265,7 @@ namespace ImGui
         colors[ImGuiCol_ModalWindowDimBg] = ImVec4(1.00f, 0.00f, 0.00f, 0.35f);
 
         ImGuiStyle& style = ImGui::GetStyle();
-        style.WindowPadding = ImVec2(8.00f, 8.00f);
+        style.WindowPadding = ImVec2(0.00f, 8.00f);
         style.FramePadding = ImVec2(5.00f, 2.00f);
         style.CellPadding = ImVec2(6.00f, 6.00f);
         style.ItemSpacing = ImVec2(6.00f, 6.00f);
@@ -265,48 +348,48 @@ namespace ImGui
     }
 
     bool LoadTextureFromBuffer(unsigned char* buffer, int bufLen, ID3D11ShaderResourceView** out_srv)
-{
-    int image_width = 0;
-    int image_height = 0;
-    unsigned char* image_data = stbi_load_from_memory(buffer, bufLen, &image_width, &image_height, NULL, 4);
-    if (image_data == NULL)
-        return false;
+    {
+        int image_width = 0;
+        int image_height = 0;
+        unsigned char* image_data = stbi_load_from_memory(buffer, bufLen, &image_width, &image_height, NULL, 4);
+        if (image_data == NULL)
+            return false;
 
-    // Create texture
-    D3D11_TEXTURE2D_DESC desc;
-    ZeroMemory(&desc, sizeof(desc));
-    desc.Width = image_width;
-    desc.Height = image_height;
-    desc.MipLevels = 1;
-    desc.ArraySize = 1;
-    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    desc.SampleDesc.Count = 1;
-    desc.Usage = D3D11_USAGE_DEFAULT;
-    desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-    desc.CPUAccessFlags = 0;
+        // Create texture
+        D3D11_TEXTURE2D_DESC desc;
+        ZeroMemory(&desc, sizeof(desc));
+        desc.Width = image_width;
+        desc.Height = image_height;
+        desc.MipLevels = 1;
+        desc.ArraySize = 1;
+        desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        desc.SampleDesc.Count = 1;
+        desc.Usage = D3D11_USAGE_DEFAULT;
+        desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+        desc.CPUAccessFlags = 0;
 
-    ID3D11Texture2D* pTexture = NULL;
-    D3D11_SUBRESOURCE_DATA subResource;
-    subResource.pSysMem = image_data;
-    subResource.SysMemPitch = desc.Width * 4;
-    subResource.SysMemSlicePitch = 0;
-    g_pd3dDevice->CreateTexture2D(&desc, &subResource, &pTexture);
+        ID3D11Texture2D* pTexture = NULL;
+        D3D11_SUBRESOURCE_DATA subResource;
+        subResource.pSysMem = image_data;
+        subResource.SysMemPitch = desc.Width * 4;
+        subResource.SysMemSlicePitch = 0;
+        g_pd3dDevice->CreateTexture2D(&desc, &subResource, &pTexture);
 
-    // Create texture view
-    D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
-    ZeroMemory(&srvDesc, sizeof(srvDesc));
-    srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-    srvDesc.Texture2D.MipLevels = desc.MipLevels;
-    srvDesc.Texture2D.MostDetailedMip = 0;
-    g_pd3dDevice->CreateShaderResourceView(pTexture, &srvDesc, out_srv);
-    pTexture->Release();
+        // Create texture view
+        D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
+        ZeroMemory(&srvDesc, sizeof(srvDesc));
+        srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+        srvDesc.Texture2D.MipLevels = desc.MipLevels;
+        srvDesc.Texture2D.MostDetailedMip = 0;
+        g_pd3dDevice->CreateShaderResourceView(pTexture, &srvDesc, out_srv);
+        pTexture->Release();
 
-    //*out_width = image_width;
-    //*out_height = image_height;
-    stbi_image_free(image_data);
+        //*out_width = image_width;
+        //*out_height = image_height;
+        stbi_image_free(image_data);
 
-    return true;
-}
+        return true;
+    }
 
 };

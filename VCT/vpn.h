@@ -1,5 +1,9 @@
 #pragma once
-#include "framework.h"
+#define CPPHTTPLIB_OPENSSL_SUPPORT
+
+#include "include/httplib.h"
+#include "include/inicpp.h"
+#include "include/csv.h"
 #include "util.h"
 
 /*
@@ -8,8 +12,13 @@
 */
 
 constexpr const char* VPN_CONNECTION_NAME = "VCT";
-const std::vector<std::string> VOIP_ROUTES = {
-    "3.0.0.0", "18.0.0.0", "34.0.0.0", "35.0.0.0", "40.0.0.0", "44.0.0.0", "45.0.0.0", "47.0.0.0", "50.0.0.0", "52.0.0.0", "54.0.0.0"
+const std::vector<std::pair<std::string, std::string>> VOIP_ROUTES = {
+    { "188.0.0.0", "255.0.0.0" },
+    { "188.42.95.0", "255.255.255.0" },
+    { "216.52.53.0", "255.255.255.0" },
+    { "74.201.103.0", "255.255.255.0" },
+    { "74.201.106.0", "255.255.254.0" },
+    { "74.201.0.0", "255.255.0.0" }
 };
 
 class VPN
@@ -46,19 +55,21 @@ public:
 
     void getServersList()
     {
-        cpr::Response r = cpr::Get(cpr::Url { "https://www.vpngate.net/api/iphone/" });
+        httplib::Client cli("https://www.vpngate.net");
 
-        if (r.status_code == 200)
+        auto r = cli.Get("/api/iphone/");
+
+        if (r->status == 200)
         {
             // the csv here is not valid, but it's the only way to get the data so we fix it
-            r.text.erase(0, 15); // removes (*vpn_servers\n#)
-            r.text.resize(r.text.size() - 3); // removes (*)
+            r->body.erase(0, 15); // removes (*vpn_servers\n#)
+            r->body.resize(r->body.size() - 3); // removes (*)
 
-            return parseServers(r.text);
+            return parseServers(r->body);
         }
         else
         {
-            printf("Status: %i\n", r.status_code);
+            printf("Status: %i\n", r->status);
         }
 
         auto ret = MessageBoxA(nullptr, "An error occured while getting servers list.\nPlease make sure you have a stable internet connection and press retry or press cancel to exit.", "Caution!", MB_RETRYCANCEL | MB_ICONWARNING);
@@ -83,20 +94,24 @@ public:
 
     VPN()
     {
-        auto serverThread = std::thread([this]
-                                        { getServersList(); });
-        serverThread.join();
+        auto serverThread = std::thread(
+            [this]
+            {
+                getServersList();
+            });
+
+        serverThread.detach();
     }
     ~VPN()
     {
     }
 
-    static void error(DWORD n)
+    static void error(const char* msg, DWORD n)
     {
         char szBuf[256];
         if (RasGetErrorStringA((UINT)n, (LPSTR)szBuf, 256) != ERROR_SUCCESS)
         {
-            sprintf((LPSTR)szBuf, "Undefined RAS Dial Error (%ld).", n);
+            sprintf((LPSTR)szBuf, "Undefined RAS Dial Error (%ld) (%s).", n, msg);
         }
 
         MessageBoxA(NULL, (LPSTR)szBuf, "Error", MB_OK | MB_ICONSTOP);
@@ -256,29 +271,30 @@ public:
         {
             printf("[addRouting] Adding routing to [%s]...\n", _interface->IpAddressList.IpAddress.String);
 
-            for (auto&& ip : VOIP_ROUTES)
+            for (auto&& route : VOIP_ROUTES)
             {
                 MIB_IPFORWARDROW ipForwardRow;
                 memset(&ipForwardRow, 0, sizeof(ipForwardRow));
 
-                ipForwardRow.dwForwardDest = inet_addr(ip.c_str());
-                ipForwardRow.dwForwardMask = inet_addr("255.0.0.0");
+                ipForwardRow.dwForwardDest = inet_addr(route.first.c_str());
+                ipForwardRow.dwForwardMask = inet_addr(route.second.c_str());
                 ipForwardRow.dwForwardNextHop = inet_addr(_interface->IpAddressList.IpAddress.String);
                 ipForwardRow.dwForwardPolicy = 0;
                 ipForwardRow.dwForwardProto = MIB_IPPROTO_NETMGMT;
                 ipForwardRow.dwForwardType = MIB_IPROUTE_TYPE_DIRECT;
                 ipForwardRow.dwForwardIfIndex = _interface->Index;
                 ipForwardRow.dwForwardNextHopAS = 0;
-                ipForwardRow.dwForwardMetric1 = 36;
-                ipForwardRow.dwForwardMetric2 = -1;
-                ipForwardRow.dwForwardMetric3 = -1;
-                ipForwardRow.dwForwardMetric4 = -1;
-                ipForwardRow.dwForwardMetric5 = -1;
+                ipForwardRow.dwForwardAge = 0;
+                ipForwardRow.dwForwardMetric1 = 56;
+                ipForwardRow.dwForwardMetric2 = 0;
+                ipForwardRow.dwForwardMetric3 = 0;
+                ipForwardRow.dwForwardMetric4 = 0;
+                ipForwardRow.dwForwardMetric5 = 0;
 
                 auto dwRet = CreateIpForwardEntry(&ipForwardRow);
                 if (dwRet != NO_ERROR)
                 {
-                    error(dwRet);
+                    error("CreateIPForwardEntry", dwRet);
                     printf("[addRouting] Failed to add routing!\n");
                 }
             }
@@ -330,7 +346,7 @@ public:
 
             printf("[Connect] Failed to connect!\n");
 
-            error(dwRet);
+            error("RasDialA", dwRet);
         }
         else
         {
@@ -398,7 +414,7 @@ public:
                 printf("[Disconnect] Failed to disconnect!\n");
             }
 
-            error(dwRet);
+            error("RasHangUpA", dwRet);
         }
 
         return false;

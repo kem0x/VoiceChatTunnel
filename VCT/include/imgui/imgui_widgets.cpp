@@ -763,9 +763,9 @@ bool ImGui::SwitchButton(const char* str_id, bool* v)
     ImVec2 p = ImGui::GetCursorScreenPos();
     ImDrawList* draw_list = ImGui::GetWindowDrawList();
 
-    float height = 75.0f; // ImGui::GetFrameHeight();
+    float height = 50.0f; // ImGui::GetFrameHeight();
     float width = height * 2.0f;
-    float radius = height * 0.40f;
+    float radius = height * 0.36f;
 
     auto ret = false;
 
@@ -790,7 +790,7 @@ bool ImGui::SwitchButton(const char* str_id, bool* v)
     /*if (ImGui::IsItemHovered())6
         col_bg = ImGui::GetColorU32(ImLerp(ImVec4(0.65, 0.15, 0.96f, 1.0f), ImVec4(0.64f, 0.83f, 0.34f, 1.0f), t));
     else*/
-    col_bg = ImGui::GetColorU32(ImLerp(ImVec4(0.29f, 0.27f, 0.34f, 1.0f), ImVec4(0.16f, 0.45f, 0.89f, 1.0f), t));
+    col_bg = ImGui::GetColorU32(ImLerp(ImVec4(0.13f, 0.13f, 0.13f, 1.0f), ImVec4(0.173f, 0.165f, 0.349f, 1.0f), t));
 
     draw_list->AddRectFilled(p, ImVec2(p.x + width, p.y + height), col_bg, height * 0.5f);
     draw_list->AddCircleFilled(ImVec2(p.x + radius + t * (width - radius * 2.0f - 14.0f) + 7.0f, p.y + radius + 7.0f), radius - 1.5f, IM_COL32(255, 255, 255, 255));
@@ -798,7 +798,7 @@ bool ImGui::SwitchButton(const char* str_id, bool* v)
     return ret;
 }
 
-bool ImGui::ColoredButton(const char* label, const ImVec2& size_arg, ImU32 text_color, ImU32 bg_color_1, ImU32 bg_color_2)
+bool ImGui::ColoredButton(const char* label, const ImVec2& size_arg, ImU32 text_color, ImU32 bg_color_1, ImU32 bg_color_2, float rounding)
 {
     ImGuiWindow* window = GetCurrentWindow();
     if (window->SkipItems)
@@ -811,6 +811,11 @@ bool ImGui::ColoredButton(const char* label, const ImVec2& size_arg, ImU32 text_
 
     ImVec2 pos = window->DC.CursorPos;
     ImVec2 size = CalcItemSize(size_arg, label_size.x + style.FramePadding.x * 2.0f, label_size.y + style.FramePadding.y * 2.0f);
+
+    if (rounding == 0)
+    {
+        rounding = g.Style.FrameRounding;
+    }
 
     const ImRect bb(pos, pos + size);
     ItemSize(size, style.FramePadding.y);
@@ -856,15 +861,15 @@ bool ImGui::ColoredButton(const char* label, const ImVec2& size_arg, ImU32 text_
 
     // V2
     int vert_start_idx = window->DrawList->VtxBuffer.Size;
-    window->DrawList->AddRectFilled(bb.Min, bb.Max, bg_color_1, ImDrawCornerFlags_Top);
+    window->DrawList->AddRectFilled(bb.Min, bb.Max, bg_color_1, rounding);
     int vert_end_idx = window->DrawList->VtxBuffer.Size;
     if (is_gradient)
         ShadeVertsLinearColorGradientKeepAlpha(window->DrawList, vert_start_idx, vert_end_idx, bb.Min, bb.GetBL(), bg_color_1, bg_color_2);
     if (g.Style.FrameBorderSize > 0.0f)
-        window->DrawList->AddRect(bb.Min, bb.Max, GetColorU32(ImGuiCol_Border), g.Style.FrameRounding, 0, g.Style.FrameBorderSize);
+        // window->DrawList->AddRect(bb.Min, bb.Max, GetColorU32(ImGuiCol_Border), rounding, 0, g.Style.FrameBorderSize);
 
-    if (g.LogEnabled)
-        LogSetNextTextDecoration("[", "]");
+        if (g.LogEnabled)
+            LogSetNextTextDecoration("[", "]");
     PushStyleColor(ImGuiCol_Text, text_color);
     RenderTextClipped(bb.Min + style.FramePadding, bb.Max - style.FramePadding, label, NULL, &label_size, style.ButtonTextAlign, &bb);
     PopStyleColor();

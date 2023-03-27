@@ -1,5 +1,9 @@
 #pragma once
-#include "framework.h"
+#include <strsafe.h>
+#include <icmpapi.h>
+#include <Dbghelp.h>
+#include <Shlobj.h>
+#include <Iphlpapi.h>
 
 #define EXECUTE_ONE_TIME if (([] { 		    \
     static bool is_first_time = true;	    \
@@ -73,7 +77,7 @@ namespace util
         SYSTEMTIME stTime = { 0 };
         GetSystemTime(&stTime);
         SHGetSpecialFolderPath(NULL, tszPath, CSIDL_APPDATA, FALSE);
-        StringCbPrintf(tszFileName, _countof(tszFileName), _T("%s\\%s__%4d%02d%02d_%02d%02d%02d.dmp"), tszPath, _T("CrashDump"), stTime.wYear, stTime.wMonth, stTime.wDay, stTime.wHour, stTime.wMinute, stTime.wSecond);
+        StringCbPrintf(tszFileName, _countof(tszFileName), L"%s\\%s__%4d%02d%02d_%02d%02d%02d.dmp", tszPath, L"CrashDump", stTime.wYear, stTime.wMonth, stTime.wDay, stTime.wHour, stTime.wMinute, stTime.wSecond);
 
         HANDLE hFile = CreateFile(tszFileName, GENERIC_WRITE, FILE_SHARE_READ, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
         if (hFile == INVALID_HANDLE_VALUE)
@@ -100,11 +104,4 @@ namespace util
         }
         return;
     }
-
-    LONG CALLBACK unhandled_handler(EXCEPTION_POINTERS* e)
-    {
-        make_minidump(e);
-        return EXCEPTION_CONTINUE_SEARCH;
-    }
-
 }
