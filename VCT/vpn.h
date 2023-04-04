@@ -4,7 +4,6 @@
 #include "include/httplib.h"
 #include "include/inicpp.h"
 #include "include/csv.h"
-#include "util.h"
 
 /*
  KNOWN ISSUE(S) :
@@ -13,12 +12,8 @@
 
 constexpr const char* VPN_CONNECTION_NAME = "VCT";
 const std::vector<std::pair<std::string, std::string>> VOIP_ROUTES = {
-    { "188.0.0.0", "255.0.0.0" },
     { "188.42.95.0", "255.255.255.0" },
-    { "216.52.53.0", "255.255.255.0" },
-    { "74.201.103.0", "255.255.255.0" },
-    { "74.201.106.0", "255.255.254.0" },
-    { "74.201.0.0", "255.255.0.0" }
+    { "37.244.0.0", "255.255.0.0" },
 };
 
 class VPN
@@ -27,7 +22,7 @@ class VPN
     PIP_ADAPTER_INFO _interface = nullptr;
 
 public:
-    std::string currentServer = "N/A";
+    std::pair<std::string, std::string> currentServer = { "", "" };
     std::vector<std::pair<std::string, std::string>> serversList = {};
 
     void parseServers(const std::string& data)
@@ -97,7 +92,14 @@ public:
         auto serverThread = std::thread(
             [this]
             {
-                getServersList();
+                __try
+                {
+                    getServersList();
+                }
+                __except (EXCEPTION_EXECUTE_HANDLER)
+                {
+                    MessageBoxA(nullptr, "An error occured while getting servers list.\nPlease make sure you have a stable internet connection and press retry.", "Caution!", MB_OK | MB_ICONERROR);
+                }
             });
 
         serverThread.detach();
@@ -136,19 +138,15 @@ public:
                 DWORD dwSize = sizeof(RASENTRYA);
                 ret = RasGetEntryPropertiesA(NULL, VPN_CONNECTION_NAME, &lpEntry, &dwSize, NULL, NULL);
 
-                printf("Test: %d\n", ret);
-
                 lpEntry.dwVpnStrategy = 6;
                 lpEntry.dwType = RASET_Vpn;
                 lpEntry.dwfNetProtocols = RASNP_Ip;
                 lstrcpyA(lpEntry.szDeviceType, "vpn");
                 lpEntry.dwEncryptionType = ET_Optional;
-                lstrcpyA(lpEntry.szLocalPhoneNumber, this->currentServer.c_str());
+                lstrcpyA(lpEntry.szLocalPhoneNumber, this->currentServer.second.c_str());
 
                 if (ret = RasSetEntryPropertiesA(NULL, VPN_CONNECTION_NAME, &lpEntry, sizeof(RASENTRYA), NULL, NULL) == ERROR_SUCCESS)
                 {
-                    printf("Test1: %d\n", ret);
-
                     return true;
                 }
             }
@@ -185,32 +183,11 @@ public:
             DWORD dwSize = sizeof(RASENTRYA);
             RasGetEntryPropertiesA(NULL, VPN_CONNECTION_NAME, &lpEntry, &dwSize, NULL, NULL);
 
-            if (server.first.empty())
-            {
-                std::pair<std::pair<std::string, std::string>, long> bestServer = { { "", "" }, 999 };
-                for (auto& server : this->serversList)
-                {
-                    auto ping = util::ping(server.first.c_str());
-                    printf("[changeServer] Ping: %i\n", ping);
-                    if (ping < bestServer.second)
-                    {
-                        printf("[changeServer] New best server: %s - %i\n", server.first.c_str(), ping);
-                        bestServer = { server, ping };
-                    }
-                }
-
-                printf("[changeServer] Best server: %s - %i\n", bestServer.first.first.c_str(), bestServer.second);
-
-                this->currentServer = bestServer.first.second;
-            }
-            else
-            {
-                this->currentServer = server.second;
-            }
+            this->currentServer = server;
 
             pingStrFunc(server.first);
 
-            lstrcpyA(lpEntry.szLocalPhoneNumber, this->currentServer.c_str());
+            lstrcpyA(lpEntry.szLocalPhoneNumber, this->currentServer.second.c_str());
 
             RasSetEntryPropertiesA(NULL, VPN_CONNECTION_NAME, &lpEntry, sizeof(RASENTRYA), NULL, NULL);
 
@@ -284,12 +261,12 @@ public:
                 ipForwardRow.dwForwardType = MIB_IPROUTE_TYPE_DIRECT;
                 ipForwardRow.dwForwardIfIndex = _interface->Index;
                 ipForwardRow.dwForwardNextHopAS = 0;
-                ipForwardRow.dwForwardAge = 0;
-                ipForwardRow.dwForwardMetric1 = 56;
-                ipForwardRow.dwForwardMetric2 = 0;
-                ipForwardRow.dwForwardMetric3 = 0;
-                ipForwardRow.dwForwardMetric4 = 0;
-                ipForwardRow.dwForwardMetric5 = 0;
+                ipForwardRow.dwForwardAge = INFINITE;
+                ipForwardRow.dwForwardMetric1 = 36;
+                ipForwardRow.dwForwardMetric2 = 36;
+                ipForwardRow.dwForwardMetric3 = 36;
+                ipForwardRow.dwForwardMetric4 = 36;
+                ipForwardRow.dwForwardMetric5 = 36;
 
                 auto dwRet = CreateIpForwardEntry(&ipForwardRow);
                 if (dwRet != NO_ERROR)
@@ -329,7 +306,7 @@ public:
 
             if (dwRet == ERROR_SUCCESS)
             {
-                if (connection)
+                // if (connection)
                 {
                     printf("[Connect] Connected!\n");
                     if (addRouting())

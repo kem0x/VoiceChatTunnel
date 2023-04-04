@@ -763,9 +763,9 @@ bool ImGui::SwitchButton(const char* str_id, bool* v)
     ImVec2 p = ImGui::GetCursorScreenPos();
     ImDrawList* draw_list = ImGui::GetWindowDrawList();
 
-    float height = 50.0f; // ImGui::GetFrameHeight();
+    float height = 75.0f; // ImGui::GetFrameHeight();
     float width = height * 2.0f;
-    float radius = height * 0.36f;
+    float radius = height * 0.40f;
 
     auto ret = false;
 
@@ -790,7 +790,7 @@ bool ImGui::SwitchButton(const char* str_id, bool* v)
     /*if (ImGui::IsItemHovered())6
         col_bg = ImGui::GetColorU32(ImLerp(ImVec4(0.65, 0.15, 0.96f, 1.0f), ImVec4(0.64f, 0.83f, 0.34f, 1.0f), t));
     else*/
-    col_bg = ImGui::GetColorU32(ImLerp(ImVec4(0.13f, 0.13f, 0.13f, 1.0f), ImVec4(0.173f, 0.165f, 0.349f, 1.0f), t));
+    col_bg = ImGui::GetColorU32(ImLerp(ImVec4(0.043f, 0.039f, 0.161f, 1.0f), ImVec4(0.043f, 0.039f, 0.161f, 1.0f), t));
 
     draw_list->AddRectFilled(p, ImVec2(p.x + width, p.y + height), col_bg, height * 0.5f);
     draw_list->AddCircleFilled(ImVec2(p.x + radius + t * (width - radius * 2.0f - 14.0f) + 7.0f, p.y + radius + 7.0f), radius - 1.5f, IM_COL32(255, 255, 255, 255));
@@ -831,6 +831,7 @@ bool ImGui::ColoredButton(const char* label, const ImVec2& size_arg, ImU32 text_
 
     // Render
     const bool is_gradient = bg_color_1 != bg_color_2;
+    /*
     if (held || hovered)
     {
         // Modify colors (ultimately this can be prebaked in the style)
@@ -857,6 +858,7 @@ bool ImGui::ColoredButton(const char* label, const ImVec2& size_arg, ImU32 text_
             bg_color_2 = bg_color_1;
         }
     }
+    */
     RenderNavHighlight(bb, id);
 
     // V2
@@ -865,11 +867,11 @@ bool ImGui::ColoredButton(const char* label, const ImVec2& size_arg, ImU32 text_
     int vert_end_idx = window->DrawList->VtxBuffer.Size;
     if (is_gradient)
         ShadeVertsLinearColorGradientKeepAlpha(window->DrawList, vert_start_idx, vert_end_idx, bb.Min, bb.GetBL(), bg_color_1, bg_color_2);
-    if (g.Style.FrameBorderSize > 0.0f)
-        // window->DrawList->AddRect(bb.Min, bb.Max, GetColorU32(ImGuiCol_Border), rounding, 0, g.Style.FrameBorderSize);
+    if (g.Style.FrameBorderSize > 0.0f && hovered)
+        window->DrawList->AddRect(bb.Min, bb.Max, GetColorU32(ImGuiCol_Border), rounding, 0, g.Style.FrameBorderSize);
 
-        if (g.LogEnabled)
-            LogSetNextTextDecoration("[", "]");
+    if (g.LogEnabled)
+        LogSetNextTextDecoration("[", "]");
     PushStyleColor(ImGuiCol_Text, text_color);
     RenderTextClipped(bb.Min + style.FramePadding, bb.Max - style.FramePadding, label, NULL, &label_size, style.ButtonTextAlign, &bb);
     PopStyleColor();
@@ -890,26 +892,15 @@ bool ImGui::ClickableText(const char* string)
 
     const ImRect bb(window->DC.CursorPos, window->DC.CursorPos + textSize);
 
-    /* if (!ItemAdd(bb, id))
-        return false;*/
+    if (!ItemAdd(bb, id))
+        return false;
 
     g.LastItemData.ID = id;
 
     bool hovered, held;
     bool pressed = ButtonBehavior(bb, id, &hovered, &held, 0);
 
-    float t = hovered ? 1.0f : 0.0f;
-
-    float ANIM_SPEED = 0.10f;
-    if (g.LastActiveId == g.CurrentWindow->GetID(string))
-    {
-        float t_anim = ImSaturate(g.LastActiveIdTimer / ANIM_SPEED);
-        t = hovered ? (t_anim) : (1.0f - t_anim);
-    }
-
-    auto fontSize = ImLerp(g.FontSize, 0.0f, t);
-
-    window->DrawList->AddText(g.Font, fontSize, window->DC.CursorPos, GetColorU32(ImVec4(1.00f, 1.00f, 1.00f, hovered ? 1.00f : 0.50f)), string, nullptr, 0);
+    window->DrawList->AddText(g.Font, g.FontSize, window->DC.CursorPos, GetColorU32(ImVec4(1.00f, 1.00f, 1.00f, hovered ? 1.00f : 0.50f)), string, nullptr, 0);
 
     ItemSize(textSize);
 
@@ -1238,7 +1229,7 @@ bool ImGui::ScrollbarEx(const ImRect& bb_frame, ImGuiID id, ImGuiAxis axis, ImS6
     const ImU32 bg_col = GetColorU32(ImGuiCol_ScrollbarBg);
     const ImU32 grab_col = GetColorU32(held ? ImGuiCol_ScrollbarGrabActive : hovered ? ImGuiCol_ScrollbarGrabHovered
                                                                                      : ImGuiCol_ScrollbarGrab,
-                                       alpha);
+        alpha);
     window->DrawList->AddRectFilled(bb_frame.Min, bb_frame.Max, bg_col, window->WindowRounding, flags);
     ImRect grab_rect;
     if (axis == ImGuiAxis_X)
@@ -1355,7 +1346,7 @@ bool ImGui::Checkbox(const char* label, bool* v)
     RenderNavHighlight(total_bb, id);
     RenderFrame(check_bb.Min, check_bb.Max, GetColorU32((held && hovered) ? ImGuiCol_FrameBgActive : hovered ? ImGuiCol_FrameBgHovered
                                                                                                              : ImGuiCol_FrameBg),
-                true, style.FrameRounding);
+        true, style.FrameRounding);
     ImU32 check_col = GetColorU32(ImGuiCol_CheckMark);
     bool mixed_value = (g.LastItemData.InFlags & ImGuiItemFlags_MixedValue) != 0;
     if (mixed_value)
@@ -1462,7 +1453,7 @@ bool ImGui::RadioButton(const char* label, bool active)
     RenderNavHighlight(total_bb, id);
     window->DrawList->AddCircleFilled(center, radius, GetColorU32((held && hovered) ? ImGuiCol_FrameBgActive : hovered ? ImGuiCol_FrameBgHovered
                                                                                                                        : ImGuiCol_FrameBg),
-                                      16);
+        16);
     if (active)
     {
         const float pad = ImMax(1.0f, IM_FLOOR(square_sz / 6.0f));
@@ -4725,13 +4716,13 @@ bool ImGui::InputTextEx(const char* label, const char* hint, char* buf, int buf_
         {
             state->OnKeyPressed((is_startend_key_down ? STB_TEXTEDIT_K_LINESTART : is_wordmove_key_down ? STB_TEXTEDIT_K_WORDLEFT
                                                                                                         : STB_TEXTEDIT_K_LEFT)
-                                | k_mask);
+                | k_mask);
         }
         else if (IsKeyPressed(ImGuiKey_RightArrow))
         {
             state->OnKeyPressed((is_startend_key_down ? STB_TEXTEDIT_K_LINEEND : is_wordmove_key_down ? STB_TEXTEDIT_K_WORDRIGHT
                                                                                                       : STB_TEXTEDIT_K_RIGHT)
-                                | k_mask);
+                | k_mask);
         }
         else if (IsKeyPressed(ImGuiKey_UpArrow) && is_multiline)
         {

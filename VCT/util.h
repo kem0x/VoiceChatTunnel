@@ -1,4 +1,6 @@
 #pragma once
+#include <fstream>
+#include <vector>
 #include <strsafe.h>
 #include <icmpapi.h>
 #include <Dbghelp.h>
@@ -103,5 +105,72 @@ namespace util
             hFile = NULL;
         }
         return;
+    }
+
+    bool isAutoStartUpAlready()
+    {
+        HKEY hKey = NULL;
+        LONG lResult = RegOpenKeyEx(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", 0, KEY_READ, &hKey);
+        if (lResult != ERROR_SUCCESS)
+        {
+            return false;
+        }
+
+        DWORD dwType = REG_SZ;
+        DWORD dwSize = 0;
+        lResult = RegQueryValueEx(hKey, L"VCT", NULL, &dwType, NULL, &dwSize);
+        if (lResult != ERROR_SUCCESS)
+        {
+            return false;
+        }
+
+        wchar_t* pValue = new wchar_t[dwSize];
+        lResult = RegQueryValueEx(hKey, L"VCT", NULL, &dwType, (LPBYTE)pValue, &dwSize);
+        if (lResult != ERROR_SUCCESS)
+        {
+            return false;
+        }
+
+        delete[] pValue;
+        pValue = NULL;
+
+        RegCloseKey(hKey);
+        hKey = NULL;
+
+        return true;
+    }
+
+    void createOrDeleteAutoStartUp()
+    {
+        HKEY hKey = NULL;
+        LONG lResult = RegOpenKeyEx(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", 0, KEY_ALL_ACCESS, &hKey);
+        if (lResult != ERROR_SUCCESS)
+        {
+            return;
+        }
+
+        wchar_t szPath[MAX_PATH] = { 0 };
+        GetModuleFileNameW(NULL, szPath, MAX_PATH);
+        auto strPath = L'"' + std::wstring(szPath) + L'"';
+
+        if (isAutoStartUpAlready())
+        {
+            lResult = RegDeleteValue(hKey, L"VCT");
+            if (lResult != ERROR_SUCCESS)
+            {
+                return;
+            }
+        }
+        else
+        {
+            lResult = RegSetValueEx(hKey, L"VCT", 0, REG_SZ, (LPBYTE)strPath.c_str(), (strPath.length() + 1) * sizeof(wchar_t));
+            if (lResult != ERROR_SUCCESS)
+            {
+                return;
+            }
+        }
+
+        RegCloseKey(hKey);
+        hKey = NULL;
     }
 }
